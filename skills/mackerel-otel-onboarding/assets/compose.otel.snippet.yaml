@@ -1,0 +1,53 @@
+# compose.yaml に取り込むスニペット
+#
+# 1. トップレベルに x-otel-env を追加する
+# 2. 計装する各サービスの environment に `<<: *otel-env` と `OTEL_SERVICE_NAME: <サービス名>` を追加する
+# 3. services に otel-collector を追加し、計装する各サービスの depends_on に otel-collector を加える（必須。下の例を参照）
+# 4. assets/otel-collector.yaml をリポジトリの otel/collector.yaml にコピーする
+#    （ログを送らず Mackerel 公式 Collector を使いたい場合は assets/otel-collector-mackerel.yaml と references/collector.md）
+#
+# MACKEREL_APIKEY は環境変数（または .env）から compose が補間する。ファイルには書かない。
+
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: otlp
+  # ログ送信（Mackerel のログ機能）。フェーズ 2'' で承認されたら otlp にする。none なら送らない
+  OTEL_LOGS_EXPORTER: ${OTEL_LOGS:-none}
+  # Python: stdlib logging を OTel ログに橋渡し（SDK 1.40 以降は既定で有効）
+  OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
+  OTEL_METRIC_EXPORT_INTERVAL: "10000"
+  # Node SDK は interval >= timeout でないと初期化に失敗する（既定 timeout 30000）
+  OTEL_METRIC_EXPORT_TIMEOUT: "5000"
+  # HTTP セマンティック規約を安定版に統一（全言語で http.server.request.duration / 秒 になる）
+  OTEL_SEMCONV_STABILITY_OPT_IN: http
+  # deployment.environment.name は APM の環境タブに、service.namespace はサービスのグループに使われる
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${OTEL_DEPLOYMENT_ENV:-local},service.namespace=${OTEL_SERVICE_NAMESPACE:-__PROJECT__}
+  # Node の自動計装でノイズになるものを外す
+  OTEL_NODE_DISABLED_INSTRUMENTATIONS: fs,dns,net
+  # Go（assets/go/otel.go）が計装しないパス。discover.sh の exclude_routes（compose のヘルスチェックのパス）に合わせる
+  OTEL_HTTP_EXCLUDE_PATHS: /healthz,/health,/readyz
+
+services:
+  otel-collector:
+    # OpenTelemetry Collector（contrib）。メトリクス・トレース・ログを Mackerel に送る。
+    # Mackerel 公式ディストリビューション（MDOT 0.2.0）はログ未対応のため、ログ不要時のオプション扱い
+    image: otel/opentelemetry-collector-contrib:0.138.0
+    command: ["--config", "/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    environment:
+      MACKEREL_APIKEY: ${MACKEREL_APIKEY:?MACKEREL_APIKEY を環境変数か .env で指定してください}
+
+  # 計装する各アプリサービスに追加する部分（environment と depends_on の両方が必須）
+  # example-service:
+  #   environment:
+  #     <<: *otel-env
+  #     OTEL_SERVICE_NAME: example-service
+  #   depends_on:
+  #     # 既存の depends_on があればそこに追記する。これが無いと compose は Collector を先に止めるため、
+  #     # down のたびに SDK が「otel-collector を解決できない」ERROR/WARN を吐き、それが Mackerel のログに残り、
+  #     # 再送待ちで停止も 20 秒ほど遅くなる。起動時も Collector が先に上がるので最初の export が落ちない
+  #     otel-collector:
+  #       condition: service_started

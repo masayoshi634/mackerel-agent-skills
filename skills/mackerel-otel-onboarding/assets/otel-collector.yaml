@@ -1,0 +1,60 @@
+# 既定の Collector 設定（otel/opentelemetry-collector-contrib）。メトリクス・トレース・ログを Mackerel に送る。
+# API キーは環境変数 MACKEREL_APIKEY から補間する。ファイルには書かない。
+# ログを送らない場合は logs パイプラインを消すか、アプリ側の OTEL_LOGS_EXPORTER を none にする。
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    # Mackerel のトレースは 1 リクエスト 6MB、ログは 3.5MB 上限。公式ヘルプの推奨値
+    send_batch_size: 5000
+    send_batch_max_size: 5000
+  # ヘルスチェックのアクセスログは送らない。パスは discover.sh の exclude_routes（compose のヘルスチェック）に合わせて書き換える
+  filter/logs:
+    logs:
+      log_record:
+        - 'IsMatch(body, ".*/(healthz|health|readyz).*")'
+  # 個人情報のマスキング例（必要なら有効にして logs パイプラインに追加）
+  # transform/mask:
+  #   log_statements:
+  #     - context: log
+  #       statements:
+  #         - replace_pattern(body, "[\\w.+-]+@[\\w-]+\\.[\\w.]+", "<email>")
+  #         - delete_key(attributes, "user.email")
+  # 送信量を抑えたいときのトレースの確率サンプリング（メトリクスには影響しない）
+  # probabilistic_sampler:
+  #   sampling_percentage: 20
+
+exporters:
+  # メトリクス: OTLP/gRPC
+  otlp/mackerel-metrics:
+    endpoint: otlp.mackerelio.com:4317
+    compression: gzip
+    headers:
+      Mackerel-Api-Key: ${env:MACKEREL_APIKEY}
+  # トレースとログ: OTLP/HTTP。/v1/traces と /v1/logs は exporter が付ける。Accept ヘッダが必須
+  otlphttp/mackerel:
+    endpoint: https://otlp-vaxila.mackerelio.com
+    headers:
+      Accept: "*/*"
+      Mackerel-Api-Key: ${env:MACKEREL_APIKEY}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/mackerel-metrics]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/mackerel]
+    logs:
+      receivers: [otlp]
+      processors: [filter/logs, batch]
+      exporters: [otlphttp/mackerel]
