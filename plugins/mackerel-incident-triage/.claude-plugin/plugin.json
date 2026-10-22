@@ -1,6 +1,6 @@
 {
   "name": "mackerel-incident-triage",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Mackerel のアラートを起点に、メトリクス・トレース・ログ・コードを突き合わせて原因箇所（file:line）を特定し、7 項目の報告と GitHub Issue にする（Mackerel には書き込まない）",
   "author": { "name": "masayoshi634", "url": "https://github.com/masayoshi634" },
   "homepage": "https://github.com/masayoshi634/mackerel-agent-skills",
