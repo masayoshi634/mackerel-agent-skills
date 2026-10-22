@@ -1,0 +1,36 @@
+# Mackerel 公式 Collector（MDOT, mackerel/otelcol-mackerel）用の設定
+#
+# ゼロ設定モード（引数なし）は受信を localhost にバインドするため compose 内の他コンテナから届かない。
+# そのため受信アドレスだけ明示し、送信は mackerelotlp exporter に任せる
+# （Mackerel のメトリクス/トレース/ログそれぞれのエンドポイント・バッチ・圧縮は exporter が面倒を見る）。
+# API キーは環境変数 MACKEREL_APIKEY から読まれる。ここには書かない。
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # 送信量を抑えたい場合はコメントを外す（トレースのみ確率サンプリング）
+  # probabilistic_sampler:
+  #   sampling_percentage: 20
+
+exporters:
+  # 0.2.0 のコンポーネント名。将来の版では mackerel_otlp に改名予定
+  mackerelotlp:
+    sending_queue:
+      enabled: true
+    retry_on_failure:
+      enabled: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      # processors: [probabilistic_sampler]
+      exporters: [mackerelotlp]
+    metrics:
+      receivers: [otlp]
+      exporters: [mackerelotlp]

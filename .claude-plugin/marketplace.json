@@ -1,0 +1,21 @@
+{
+  "name": "mackerel-agent-skills",
+  "owner": { "name": "masayoshi634", "url": "https://github.com/masayoshi634" },
+  "description": "Mackerel + OpenTelemetry のスキル。計装ゼロのアプリに監視を一発で入れる onboarding と、アラートから原因箇所と Issue まで辿る incident-triage",
+  "plugins": [
+    {
+      "name": "mackerel-otel-onboarding",
+      "source": "./plugins/mackerel-otel-onboarding",
+      "description": "docker compose アプリに OpenTelemetry を計装し、Collector・SLO ベースの監視ルール・RED ダッシュボードを Mackerel に作る（MACKEREL_APIKEY だけで動く）",
+      "category": "monitoring",
+      "keywords": ["mackerel", "opentelemetry", "otel", "apm", "slo", "docker-compose"]
+    },
+    {
+      "name": "mackerel-incident-triage",
+      "source": "./plugins/mackerel-incident-triage",
+      "description": "Mackerel のアラートを起点に、メトリクス・トレース・ログ・コードを突き合わせて原因箇所（file:line）を特定し、7 項目の報告と GitHub Issue にする（Mackerel には書き込まない）",
+      "category": "monitoring",
+      "keywords": ["mackerel", "opentelemetry", "incident", "triage", "alert"]
+    }
+  ]
+}

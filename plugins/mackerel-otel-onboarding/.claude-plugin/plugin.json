@@ -1,0 +1,10 @@
+{
+  "name": "mackerel-otel-onboarding",
+  "version": "0.3.0",
+  "description": "docker compose アプリに OpenTelemetry を計装し、Collector・SLO ベースの監視ルール・RED ダッシュボードを Mackerel に作る（MACKEREL_APIKEY だけで動く）",
+  "author": { "name": "masayoshi634", "url": "https://github.com/masayoshi634" },
+  "homepage": "https://github.com/masayoshi634/mackerel-agent-skills",
+  "repository": "https://github.com/masayoshi634/mackerel-agent-skills",
+  "license": "MIT",
+  "keywords": ["mackerel", "opentelemetry", "otel", "apm", "slo", "docker-compose"]
+}
