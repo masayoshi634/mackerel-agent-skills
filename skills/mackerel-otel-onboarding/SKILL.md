@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires bash, docker compose v2, curl, jq, and network access to api.mackerelio.com and Mackerel OTLP endpoints. Target app must run with docker compose.
 metadata:
   author: masayoshi634
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # Mackerel OpenTelemetry オンボーディング

@@ -214,6 +214,11 @@ report="$(jq -n --argjson alert "$alert_json" --argjson monitor "$monitor_json" 
 
 md="$(jq -r '
   def pct: (. * 10 | round / 10);
+  # ログ本文・属性・span のメッセージはアプリや外部から入る信頼できないデータ。Markdown・リンク・メンションとして
+  # 解釈されないようにインラインコードに入れ、改行を潰し、バッククォートを置き換え、長さを制限する
+  def untrusted($n): tostring | gsub("[\\r\\n\\t]+"; " ") | gsub("`"; "\u0027") | (if length > $n then .[0:$n] + "…" else . end) | "`" + . + "`";
+  def untrusted: untrusted(300);
+  def attrs_text: to_entries | map("\(.key)=\(.value)") | join(" ");
   "# 一次調査レポート（Mackerel）",
   "",
   "- 生成: \(.generated_at)　窓: \(.window.from) 〜 \(.window.to)　namespace: `\(.namespace)`",
@@ -222,7 +227,7 @@ md="$(jq -r '
   "- 起点サービス: \(.focus_services | join(", "))",
   "",
   "## 仮説（根拠付き）",
-  (.hypotheses[] | "### \(.title)", "- 種別: `\(.kind)`", (.evidence[] | "- 根拠: \(.)"),
+  (.hypotheses[] | "### \(.title)", "- 種別: `\(.kind)`", (.evidence[] | "- 根拠: " + untrusted(400)),
      (if .cause.direct != "" then "- 直接原因: \(.cause.direct)" else empty end),
      (if .cause.structural != "" then "- 構造的な原因: \(.cause.structural)" else empty end),
      (if .impact != "" then "- 影響: \(.impact)" else empty end),
@@ -233,16 +238,16 @@ md="$(jq -r '
   (. as $r | .services[] | "### \(.service)  [APM](\($r.urls.apm[.service])) · [ログ](\($r.urls.logs[.service]))",
      (if (.error_routes | length) > 0 then (.error_routes[] | "- エラー: \(.method) \(.route)  \(.error_rate | pct)% / \(.requests) req  p95 \(.p95_ms | pct) ms") else "- エラーのあるルート: なし" end),
      (if (.slow_routes | length) > 0 then "- 遅い順: " + (.slow_routes | map("\(.route) p95 \(.p95_ms | pct) ms") | join(", ")) else empty end),
-     (if .log_count > 0 then (.log_groups[] | "- ログ [\(.severity)] \(.body) ×\(.count)" + (if (.sample_attributes | length) > 0 then "  例: " + (.sample_attributes | to_entries | map("\(.key)=\(.value)") | join(" ") | .[0:160]) else "" end)) else "- WARN/ERROR ログ: なし" end), ""),
+     (if .log_count > 0 then (.log_groups[] | "- ログ [\(.severity)] " + (.body | untrusted) + " ×\(.count)" + (if (.sample_attributes | length) > 0 then "  例: " + (.sample_attributes | attrs_text | untrusted(160)) else "" end)) else "- WARN/ERROR ログ: なし" end), ""),
   "## 代表トレース",
   (if (.traces | length) == 0 then "（候補なし）" else (.traces[] | . as $t
      | (([$t.business_keys[]? | tostring] + [$t.logs[]? | select(.severity != "INFO") | .attributes | to_entries[] | select(.key | test("(_|\\.)(id|ref)$")) | .value | tostring]) | map(select(length >= 4)) | unique) as $keys |
      "### [`\(.trace_id)`](\(.url))  \(.root.service) \(.root.name)  \(.root.duration_ms) ms  status=\(.root.status)",
      "- 画面: [トレース詳細](\(.url)) · ログ: " + (.logs_urls | to_entries | map("[\(.key)](\(.value))") | join(" ")),
-     (if (.business_keys | length) > 0 then "- キー: " + (.business_keys | to_entries | map("\(.key)=\(.value)") | join(" ")) else empty end),
-     (if (.findings | length) > 0 then (.findings[] | "- [\(.type)] \(.detail)" + (if .url then "（[span](\(.url))）" else "" end)) else "- 検出パターン: なし" end),
+     (if (.business_keys | length) > 0 then "- キー: " + (.business_keys | attrs_text | untrusted(200)) else empty end),
+     (if (.findings | length) > 0 then (.findings[] | "- [\(.type)] " + (.detail | untrusted(400)) + (if .url then "（[span](\(.url))）" else "" end)) else "- 検出パターン: なし" end),
      "- 経路: " + ([.spans[] | select(.kind == "server") | "\(.service) \(.name) \(.duration_ms)ms" + (if .status == "error" then "(error)" else "" end)] | join(" → ")),
-     (if (.logs | length) > 0 then "- ログ（同じ traceId。WARN/ERROR と、トレースの業務キーの値を含む INFO）:", (.logs[] | select(.severity != "INFO" or ((.body + " " + (.attributes | tojson)) as $txt | any($keys[]; . as $k | $txt | contains($k)))) | "  - \(.timestamp) \(.service) [\(.severity)] \(.body)" + (if (.attributes | length) > 0 then " " + (.attributes | to_entries | map("\(.key)=\(.value)") | join(" ") | .[0:200]) else "" end)) else empty end), "") end),
+     (if (.logs | length) > 0 then "- ログ（同じ traceId。WARN/ERROR と、トレースの業務キーの値を含む INFO）:", (.logs[] | select(.severity != "INFO" or ((.body + " " + (.attributes | tojson)) as $txt | any($keys[]; . as $k | $txt | contains($k)))) | "  - \(.timestamp) \(.service) [\(.severity)] " + (.body | untrusted) + (if (.attributes | length) > 0 then " " + (.attributes | attrs_text | untrusted(200)) else "" end)) else empty end), "") end),
   "---",
   "再現コマンド: `scripts/trace.sh <traceId> --logs`、`scripts/logs.sh --service <svc> --grep <語>`。アラートを閉じる操作はこのスキルでは行わない。"
 ' <<< "$report")" || die "レポートの整形に失敗しました"

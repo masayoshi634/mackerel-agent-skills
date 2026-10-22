@@ -60,10 +60,11 @@ mkr_api() {
   local method="$1" path="$2" body="${3:-}"
   local attempt resp code out
   for attempt in 1 2 3; do
-    # DELETE でも Content-Type: application/json がないと 400 になるので常に付ける
-    local args=(-sS -w $'\n%{http_code}' --max-time 30 -H "X-Api-Key: ${MACKEREL_APIKEY}" -H "Content-Type: application/json" -X "$method" "${MACKEREL_API_BASE}${path}")
+    # DELETE でも Content-Type: application/json がないと 400 になるので常に付ける。
+    # API キーのヘッダーは標準入力から渡す（-H @-）。引数に載せると実行中に ps などから見えるため
+    local args=(-sS -w $'\n%{http_code}' --max-time 30 -H @- -H "Content-Type: application/json" -X "$method" "${MACKEREL_API_BASE}${path}")
     [[ -n "$body" ]] && args+=(--data-binary "$body")
-    if resp="$(curl "${args[@]}" 2>/dev/null)"; then
+    if resp="$(curl "${args[@]}" 2>/dev/null <<< "X-Api-Key: ${MACKEREL_APIKEY}")"; then
       code="${resp##*$'\n'}"; out="${resp%$'\n'*}"
       if [[ "$code" =~ ^2 ]]; then printf '%s' "$out"; return 0; fi
       if [[ "$code" =~ ^5 || "$code" == "429" ]]; then
