@@ -5,7 +5,7 @@ Mackerel のログ機能は OTLP でログを受け取り、`service.name` ご�
 
 ## 前提と注意（2026-10 時点）
 
-- ログ機能は 2026-07 オープンβ、正式リリース予定 2026-11-01。β中は仕様変更・保持保証なしの注記あり → 既定 OFF、**承認を得てから有効化**
+- ログ機能は 2026-07 オープンβ、正式リリース予定 2026-11-01。β中は仕様変更・保持保証なしの注記あり → 既定 OFF、**フェーズ 1 の一括確認で「送る」と答えたときだけ有効化**
 - **`service.name` がないログは画面に出ない**（SDK 経由なら resource に付くので問題なし）
 - 送信先はトレースと同じ `https://otlp-vaxila.mackerelio.com`（`/v1/logs`、`Accept: */*`）。1 リクエスト 3.5MB 上限
 - **MDOT 0.2.0 はログ未対応**（logs パイプラインを足すと `telemetry type is not supported` で Collector が起動しない）。contrib を使う（既定の `assets/otel-collector.yaml`）
@@ -21,7 +21,7 @@ Mackerel のログ機能は OTLP でログを受け取り、`service.name` ご�
 | 言語 | やること | trace_id |
 |---|---|---|
 | Python | 環境変数のみ（`OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true`、SDK 1.40 以降は既定）。stdlib `logging` と uvicorn のログが送られる | 付く |
-| Node | `pino`（v7 以降）または `winston` を使っていれば自動計装が送る。**`console.log` は送られない**。置換はユーザーに提案し、承認時のみ行う | 付く |
+| Node | `pino`（v7 以降）または `winston` を使っていれば自動計装が送る。**`console.log` は送られない**。置換はフェーズ 1 で「送る（`console.log` を pino に置換）」が選ばれたときだけ行う | 付く |
 | Go | `assets/go/otel.go` の `newLogger()` で `slog` を stdout + OTel に fanout。ハンドラ内は `slog.InfoContext(r.Context(), ...)`。**ログや認証などのミドルウェアは `instrumentHTTP` の内側に置く**（外側だと `trace_id` が null） | 付く |
 | その他 | 各言語の OTel ログブリッジ（Java agent は既定で送る、Ruby は `opentelemetry-logs-sdk`） | 言語による |
 

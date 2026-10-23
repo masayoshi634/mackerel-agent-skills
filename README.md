@@ -8,7 +8,7 @@
 
 | スキル | バージョン | できること |
 |---|---|---|
-| [`mackerel-otel-onboarding`](skills/mackerel-otel-onboarding/SKILL.md) | 0.3.1 | docker compose で動くアプリに OpenTelemetry を計装し、Collector、SLO から導いたしきい値の監視ルール、RED ダッシュボードを Mackerel に作る。必要なのは `MACKEREL_APIKEY`（Write 権限）だけ |
+| [`mackerel-otel-onboarding`](skills/mackerel-otel-onboarding/SKILL.md) | 0.4.0 | docker compose で動くアプリに OpenTelemetry を計装し、Collector、SLO から導いたしきい値の監視ルール、RED ダッシュボードを Mackerel に作る。必要なのは `MACKEREL_APIKEY`（Write 権限）だけ |
 | [`mackerel-incident-triage`](skills/mackerel-incident-triage/SKILL.md) | 0.2.1 | Mackerel のアラートを起点に、メトリクス・トレース・ログ・APM とアプリのコードを突き合わせて原因箇所（`file:line`）を特定し、7 項目の報告と GitHub Issue にする。Mackerel には書き込まない（Read 権限で可） |
 
 ### インストール（Claude Code）
@@ -69,7 +69,7 @@ MIT
 
 | Skill | Version | What it does |
 |---|---|---|
-| [`mackerel-otel-onboarding`](skills/mackerel-otel-onboarding/SKILL.md) | 0.3.1 | Instruments a docker compose application with OpenTelemetry and sets up a Collector, SLO-derived alert monitors and a RED dashboard in Mackerel, with nothing but a `MACKEREL_APIKEY` (write permission) |
+| [`mackerel-otel-onboarding`](skills/mackerel-otel-onboarding/SKILL.md) | 0.4.0 | Instruments a docker compose application with OpenTelemetry and sets up a Collector, SLO-derived alert monitors and a RED dashboard in Mackerel, with nothing but a `MACKEREL_APIKEY` (write permission) |
 | [`mackerel-incident-triage`](skills/mackerel-incident-triage/SKILL.md) | 0.2.1 | Starts from a Mackerel alert, correlates metrics, traces, logs, APM stats and the application code to pinpoint the causing lines (`file:line`), and reports in seven sections, optionally as a GitHub Issue. Read-only on Mackerel |
 
 ### Install (Claude Code)

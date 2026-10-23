@@ -63,7 +63,7 @@ HTTP・主要フレームワーク・DB クライアント（pg, mysql2, ioredis
 ## ログ（フェーズ 2''）
 
 自動計装は `pino`（v7 以降）と `winston` のログを trace_id 付きで OTel に送る。**`console.log` は送られない。**
-`console.log` のアプリでログも送りたい場合は pino への置換（`logger.info({...}, msg)`）を提案し、承認されたときだけ行う。詳細は `references/logs.md`。
+`console.log` のアプリでログも送りたい場合は pino への置換（`logger.info({...}, msg)`）を、フェーズ 1 で「送る（`console.log` を pino に置換）」が選ばれたときだけ行う。詳細は `references/logs.md`。
 
 ## 確認方法
 

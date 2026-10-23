@@ -2,7 +2,7 @@
 # フェーズ 4: 到達確認。各サービスのトレースが Mackerel の API で見えるまで待ち、APM 統計、Collector のエラー、Collector への depends_on を確認する
 # 使い方: scripts/verify-ingest.sh [--services a,b,c] [--namespace NS] [--environment ENV] [--timeout 180] [--interval 15]
 #           [--since-minutes 10] [--collector-service otel-collector] [--exclude-routes "/healthz"] [--hit URL]... [--logs]
-#   出力の baseline はサービス単位の要約（5 分換算の件数、件数で重み付けしたエラー率、p95 の最大）。SLO 提案の実測欄に使う
+#   出力の baseline はサービス単位の要約（5 分換算の件数、件数で重み付けしたエラー率、p95 の最大）。SLO のしきい値への翻訳（フェーズ 4.5）に使う
 #   --logs を付けるとサービスごとのログ件数と traceId 付与率も確認する（Mackerel のログ機能を有効にした場合）
 #   --hit を渡すと待つ前に各 URL を 3 回ずつ curl してトラフィックを作る
 #   --namespace は OTEL_RESOURCE_ATTRIBUTES の service.namespace と一致させる（Mackerel API では必須）

@@ -44,4 +44,4 @@
 5. `language: unknown` は `references/instrument-other.md` を読み、ユーザーに言語を確認する
 6. `upstream_env` と `depends_on` から呼び出し関係を把握し、トレースが貫通するか（クライアント計装の有無）を考える
 7. `exclude_routes` はメトリクスと監視から自動で除外される。`/healthz` 以外が含まれるなら Go の `OTEL_HTTP_EXCLUDE_PATHS` と Collector の `filter/logs` も合わせる
-8. `ports`（公開）、`depends_on`、`upstream_env`（他サービスを指すか外部か）は、フェーズ 4.5 の役割判定（`references/slo.md`）にも使う
+8. `ports`（公開）、`depends_on`、`upstream_env`（他サービスを指すか外部か）は、フェーズ 1 の役割判定（`references/slo.md`）にも使う
