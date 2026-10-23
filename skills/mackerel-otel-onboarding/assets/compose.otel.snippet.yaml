@@ -13,7 +13,7 @@ x-otel-env: &otel-env
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_TRACES_EXPORTER: otlp
   OTEL_METRICS_EXPORTER: otlp
-  # ログ送信（Mackerel のログ機能）。フェーズ 2'' で承認されたら otlp にする。none なら送らない
+  # ログ送信（Mackerel のログ機能）。フェーズ 1 で「送る」と答えたら otlp にする。none なら送らない
   OTEL_LOGS_EXPORTER: ${OTEL_LOGS:-none}
   # Python: stdlib logging を OTel ログに橋渡し（SDK 1.40 以降は既定で有効）
   OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"

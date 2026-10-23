@@ -1,23 +1,23 @@
 ---
 name: mackerel-otel-onboarding
-description: Instrument a docker compose application with OpenTelemetry and start monitoring it in Mackerel using only a MACKEREL_APIKEY. Adds zero-code or SDK instrumentation (Node.js, Python, Go; others via docs), adds an OpenTelemetry Collector that ships metrics, traces and optionally logs to Mackerel, verifies ingestion through Mackerel APIs, proposes per-service SLO targets inferred from the code (service roles, client timeouts, measured baseline) for a one-question approval, then idempotently creates alert monitors, a RED dashboard and a report. Use when the user wants to add monitoring, observability, APM, tracing, metrics or SLO-based alerts to an existing app with Mackerel, mentions Mackerel together with OpenTelemetry/OTel, or says 監視を始めたい / 計装したい / Mackerel に送りたい / ダッシュボードとアラートを作りたい / SLO を決めたい.
+description: Instrument a docker compose application with OpenTelemetry and start monitoring it in Mackerel using only a MACKEREL_APIKEY. Adds zero-code or SDK instrumentation (Node.js, Python, Go; others via docs), adds an OpenTelemetry Collector that ships metrics, traces and optionally logs to Mackerel, verifies ingestion through Mackerel APIs, asks every decision up front in a single round right after the initial survey (plan, business metrics, log shipping, per-service SLO targets inferred from service roles and client timeouts), translates the agreed targets into thresholds from the measured baseline, then idempotently creates alert monitors, a RED dashboard and a report. Use when the user wants to add monitoring, observability, APM, tracing, metrics or SLO-based alerts to an existing app with Mackerel, mentions Mackerel together with OpenTelemetry/OTel, or says 監視を始めたい / 計装したい / Mackerel に送りたい / ダッシュボードとアラートを作りたい / SLO を決めたい.
 license: MIT
 compatibility: Requires bash, docker compose v2, curl, jq, and network access to api.mackerelio.com and Mackerel OTLP endpoints. Target app must run with docker compose.
 metadata:
   author: masayoshi634
-  version: "0.3.1"
+  version: "0.4.0"
 ---
 
 # Mackerel OpenTelemetry オンボーディング
 
 docker compose で動いている既存アプリに、OpenTelemetry の計装と Mackerel への送信、監視ルール、ダッシュボードを **API キー 1 つで** 整える。
-計装の知識がない人が「スキルを実行したら監視が始まっていた」状態になることを目指す。判断（計装方針、SLO の目標、しきい値）はあなた（エージェント）がコードと実測から導き、ユーザーには承認だけを求める。
+計装の知識がない人が「スキルを実行したら監視が始まっていた」状態になることを目指す。判断（計装方針、SLO の目標、しきい値）はあなた（エージェント）がコードと実測から導き、ユーザーには最初の調査の直後に 1 回だけまとめて確認を求める。確認が済んだら、ユーザーが離席していても最後まで進められる状態を目指す。
 
 ## 不変条件（必ず守る）
 
 1. **API キーをファイルに書かない。** `MACKEREL_APIKEY` は環境変数（または既にある `.env`）から読むだけ。会話やログにも出さない。
 2. **コミットしない。** 変更は作業ツリーに残し、確認はユーザーに委ねる。
-3. **計画と diff を見せてから適用する。** 承認ポイントは「計画」「ビジネスメトリクス追加」「ログ送信」「SLO」の 4 回。
+3. **確認はフェーズ 1 の 1 回にまとめる。** AskUserQuestion を 1 回だけ呼び、「計画」「ビジネスメトリクス」「ログ送信」「SLO の目標」をまとめて聞く。以降は回答に従って進め、diff は見せるが承認は待たない。例外は、実測が合意した SLO の目標を守れないときの 1 問だけ（フェーズ 4.5）。
 4. **Mackerel 上の操作は冪等で、何も勝手に消えない。** ダッシュボードは `urlPath`、監視ルールは名前（接頭辞 `[otel-onboarding:<project>]`）で識別して更新する。再実行で指定しなかったしきい値は今の値を保ち、`--extra` で足した監視ルールとグラフは削除しない。削除されるのは compose から消えたサービスの RED ルールだけ。
 5. **scripts/ はリポジトリのファイルを変更しない。** コードと compose の変更は、references に従ってあなたが行う。設定ファイルも持たない（状態は Mackerel と compose にある）。
 6. アプリを壊さない。計装の初期化失敗でアプリが落ちない形にする（Go はエラーをログに出して続行、Node/Python はラッパーなので影響なし）。
@@ -31,7 +31,7 @@ docker compose で動いている既存アプリに、OpenTelemetry の計装と
 | `OTEL_DEPLOYMENT_ENV` | 任意 | `local` | `deployment.environment.name`（APM の環境） |
 | `OTEL_SERVICE_NAMESPACE` | 任意 | compose のプロジェクト名 | `service.namespace`。API 問い合わせにも同じ値を使う |
 | `PUBLIC_URL` | 任意 | なし | 公開 URL があれば外形監視も作る |
-| `OTEL_LOGS` | 任意 | `none` | `otlp` でログも送る（フェーズ 2'' で承認されたら compose の既定を変える） |
+| `OTEL_LOGS` | 任意 | `none` | `otlp` でログも送る（フェーズ 1 で「送る」と答えたら、フェーズ 2'' で compose の既定を変える） |
 
 ## 進め方
 
@@ -45,20 +45,38 @@ ${CLAUDE_SKILL_DIR}/scripts/preflight.sh
 
 docker compose / curl / jq、compose の妥当性、API キーの有効性と組織名を確認する。失敗したらメッセージに従って止まる（キー未設定なら発行方法を案内して終了）。
 
-### フェーズ 1: 検出と計画 → 承認 1
+### フェーズ 1: 調査と一括確認
 
 ```bash
 ${CLAUDE_SKILL_DIR}/scripts/discover.sh --pretty
 ```
 
-出力（`references/inventory-format.md`）を読み、次を表にして提示し **承認を得る**:
+出力（`references/inventory-format.md`）を読み、続けてコードを読んで、以降のフェーズで必要な判断材料を **ここで全部そろえる**:
 
-- 計装対象のサービス（`kind: app`）と言語・フレームワーク、各サービスの変更方針（ゼロコード / ラッパー / コード追加）
-- `profiles` 付きや `already_instrumented` のサービスの扱い
-- 追加する Collector と compose の共通環境変数、メトリクスから除外するルート（`exclude_routes`。compose のヘルスチェックから検出）
-- 作る監視ルールとダッシュボードの一覧。しきい値は「フェーズ 4.5 でコードと実測から SLO を提案する」と予告し、ここでは決めない
+| 調べること | 読む | 使うフェーズ |
+|---|---|---|
+| 構成: 計装対象（`kind: app`）と言語・フレームワーク、変更方針（ゼロコード / ラッパー / コード追加）、`profiles` 付きや `already_instrumented` の扱い、Collector と共通環境変数、除外ルート（`exclude_routes`） | `references/inventory-format.md`、言語が `unknown` なら `references/instrument-other.md` | 2, 3 |
+| ビジネスメトリクスの候補（成功イベント、理由別の失敗、不変条件のゲージ。最大 3 個） | `references/business-metrics.md` | 2' |
+| ログ: 各サービスのロガー（Go の slog、Node の pino / winston / `console.log`、Python の logging） | `references/logs.md` | 2'' |
+| SLO の目標: 役割の判定、呼び出し側のタイムアウトとリトライ、役割別の初期値から可用性と p99 の目標 | `references/slo.md` の 1〜4 | 4.5, 5 |
 
-言語が `unknown` のサービスがあれば `references/instrument-other.md` を読み、ユーザーに確認する。
+次の 4 つの表を提示する。判断しきれないもの（言語が `unknown`、役割の境界例、ゼロコードで足りるか不明なサービス）は推定値で埋めて **「要確認」** と印を付け、どう推定したかを添える。問いは増やさず、修正は「その他」で受ける。
+
+1. **計画**: サービスごとの言語・変更方針、Collector、除外ルート、作る監視ルールとダッシュボード
+2. **ビジネスメトリクス**: 候補ごとにメトリクス名、種類（カウンタ / ゲージ）、入れる場所（`file:line`）、監視ルールを付けるか
+3. **ログ**: 送った場合にサービスごとに何が起きるか（送られる / `console.log` のため送られない）と、β機能で保持保証がない注記
+4. **SLO の目標**: サービスごとに役割、可用性、p99 目標、根拠。実測の列としきい値はまだ無い（フェーズ 4.5 で実測から自動で計算する）と書く
+
+続けて AskUserQuestion を **1 回だけ** 呼び、最大 4 問をまとめて聞く:
+
+| 問 | multiSelect | 選択肢 |
+|---|---|---|
+| この計画で計装してよいか | false | 「この通り」「中止する」 |
+| どのビジネスメトリクスを追加するか | true | 候補（最大 3 個）＋「追加しない」。候補が無ければこの問いを省く |
+| ログを Mackerel に送るか | false | 「送る」「送らない」。`console.log` のサービスがあれば「送る（`console.log` を pino に置換）」を加える |
+| この SLO の目標で監視ルールを作ってよいか | false | 「この通り」「全体を厳しく（可用性を一段上げ、p99 を 2/3 に）」「全体を緩く（可用性を一段下げ、p99 を 1.5 倍に）」 |
+
+回答を受けたら、決まったこと（計画の修正、追加するメトリクス、ログの扱い、SLO の目標）を短い一覧にして示し、そのまま次へ進む。以降のフェーズはこの一覧に従う。「中止する」なら何も変更せずに終える。
 
 ### フェーズ 2: 計装
 
@@ -74,17 +92,17 @@ ${CLAUDE_SKILL_DIR}/scripts/discover.sh --pretty
 共通: `assets/compose.otel.snippet.yaml` の `x-otel-env` を compose に追加し、各サービスに `<<: *otel-env` と `OTEL_SERVICE_NAME` を付ける。
 `__PROJECT__` は compose のプロジェクト名に置き換える。`exclude_routes` が `/healthz` 以外なら `OTEL_HTTP_EXCLUDE_PATHS` と Collector の `filter/logs` も合わせる（監視ルールとダッシュボードは自動で同じ除外を使う）。
 
-変更は **サービス単位で diff を見せる**。ビルドが通ることをフェーズ 4 で確認する。
+変更は **サービス単位で diff を見せる**（承認は待たずに次へ進む）。ビルドが通ることをフェーズ 4 で確認する。
 
-### フェーズ 2': ビジネスメトリクス → 承認 2
+### フェーズ 2': ビジネスメトリクス
 
-`references/business-metrics.md` に従い、コードから成功イベント（注文確定、決済成功など）を 2〜3 個見つけてカウンタ追加を **提案** する。照合バッチや reconciler のように「壊れている状態の件数」を数えているコードがあれば、それはゲージとして提案に含める（5xx にも p99 にも出ない不整合を監視できる唯一の手段）。承認されたら実装し、フェーズ 5 で `--extra` として監視ルールに、フェーズ 6 で `--extra` としてグラフに加える（一度作れば再実行しても消えない）。断られたらスキップする。
+フェーズ 1 で選ばれたメトリクスだけを `references/business-metrics.md` に従って実装する。選ばれたものはフェーズ 5 で `--extra` として監視ルールに、フェーズ 6 で `--extra` としてグラフに加える（一度作れば再実行しても消えない）。「追加しない」ならスキップする。
 
-### フェーズ 2'': ログ → 承認 3
+### フェーズ 2'': ログ
 
-`references/logs.md` に従い、ログを Mackerel に送るかを **提案** する（β機能のため既定 OFF。保持保証なしの注記を添える）。
-承認されたら: compose の `OTEL_LOGS_EXPORTER` の既定を `otlp` にし、Go は `newLogger()` と `InfoContext`、Node は pino/winston の場合のみ（`console.log` なら「送られない」と伝え、置換は別途提案）、Python は環境変数のみ。
-断られたら Collector の `logs` パイプラインは残したままでよい（アプリが送らなければ何も流れない）。
+フェーズ 1 の回答に従う（β機能のため既定 OFF）。
+「送る」なら: compose の `OTEL_LOGS_EXPORTER` の既定を `otlp` にし、Go は `newLogger()` と `InfoContext`、Node は pino/winston の場合のみ、Python は環境変数のみ（`references/logs.md`）。`console.log` の Node サービスは、「送る（`console.log` を pino に置換）」が選ばれたときだけ置換する。
+「送らない」なら Collector の `logs` パイプラインは残したままでよい（アプリが送らなければ何も流れない）。
 
 ### フェーズ 3: Collector
 
@@ -104,15 +122,13 @@ ${CLAUDE_SKILL_DIR}/scripts/verify-ingest.sh --hit http://localhost:<port>/ ... 
 - ログを有効にした場合は `--logs` を付け、サービスごとの件数と `traceId` 付与率を確認する
 - メトリクスは API で確認できない。フェーズ 6 の後にダッシュボードで確認する（反映まで 1〜2 分）
 
-### フェーズ 4.5: SLO の提案 → 承認 4
+### フェーズ 4.5: SLO のしきい値への翻訳
 
-`references/slo.md` に従い、**あなたがコードと実測から全サービス分を埋めて** 提示し、ユーザーは 1 問に答えるだけにする。
+フェーズ 1 で合意した目標を、verify-ingest の `baseline` から件数と ms のしきい値に翻訳する（`references/slo.md` の 5 と 6）。**通常はユーザーに聞かない。**
 
-1. 役割を判定する（`entry` / `internal` / `gateway` / `worker`）。discover の `ports`、`depends_on`、`upstream_env` と、コードの HTTP ルートから決める
-2. 呼び出し側のタイムアウトとリトライを grep で拾い（言語別パターンは references）、「呼ばれる側の p99 目標 = 呼び出し元タイムアウト ÷ 2」を導く
-3. verify-ingest の `baseline` と役割別の初期値から、サービスごとに「役割 / 可用性の目標 / p99 の目標 / 実測 / 翻訳したしきい値 / 根拠」の表を作る。件数は `crit = max(許容エラー件数, 5)`、`warn = max(crit ÷ 2, 2)`。p99 は目標を crit、80% を warn
-4. AskUserQuestion で **1 問だけ**: 「この目標で監視を作ってよいか」。選択肢は「この通り」「全体を厳しく」「全体を緩く」。個別の修正は「その他」で受ける
-5. 承認後、フェーズ 5 の `--svc` に翻訳する。`worker` の RED ルールは作らない（`--services` から外す）
+1. サービスごとに「役割 / 可用性の目標 / p99 の目標 / 実測 / 翻訳したしきい値 / 根拠」の表を作って示す。件数は `crit = max(許容エラー件数, 5)`、`warn = max(crit ÷ 2, 2)`。p99 は目標を crit、80% を warn
+2. 実測 p95 × 1.5 が p99 目標を超えるサービスがあるときだけ、AskUserQuestion で **1 問だけ** 聞く: 「実測が目標を守れません。どうしますか」。選択肢は「目標を実測に合わせて緩める」「目標のまま作る（すぐ鳴る可能性がある）」「監視ルールを作らずにレポートへ進む（先に性能を直す）」。該当サービスと数値を問いに含める
+3. フェーズ 5 の `--svc` に写す。`worker` の RED ルールは作らない（`--services` から外す）
 
 ### フェーズ 5: 監視ルール
 
